@@ -148,14 +148,12 @@ def compute_reparam_scales(
         raise TypeError(f"Unknown prior type for '{name}': {type(prior)}")
 
 
-# Chunk size for end-of-sampling log-posterior evaluation. vmap-ing the full
-# log-posterior over ALL samples at once gives every intermediate in the
-# likelihood (notably the oversampled k-space FFT render grids) a batch
-# dimension equal to n_samples*n_chains -- a transient allocation that scales
-# with the total sample count and spikes to tens of GB at the end of a large
-# run, triggering an OOM SIGKILL ("zsh: killed" at 100%). Evaluating in fixed
-# chunks bounds the peak to ~chunk-size evaluations regardless of sample count.
-_LOG_PROB_CHUNK_SIZE = 256
+# Chunk size for the end-of-sampling log-posterior evaluation. Every
+# intermediate of the vmapped likelihood (render grids, dispersal tensors)
+# carries the chunk as a batch dimension, ~12-20 MB per sample on the
+# production fit, so the transient peak is chunk_size x that: 16 keeps it
+# under ~0.3 GiB, which packed GPU workers can always satisfy.
+_LOG_PROB_CHUNK_SIZE = 16
 
 
 def _batched_log_posterior_chunked(

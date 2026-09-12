@@ -41,6 +41,8 @@ from kl_pipe.sampling import (
 )
 from kl_pipe.sampling.numpyro import (
     NumpyroSampler,
+    _LOG_PROB_CHUNK_SIZE,
+    _batched_log_posterior_chunked,
     compute_reparam_scales,
 )
 from kl_pipe.utils import get_test_dir
@@ -227,6 +229,25 @@ def joint_model_task():
     )
 
     return task, true_pars
+
+
+# ==============================================================================
+# Chunked log-posterior evaluation
+# ==============================================================================
+
+
+def test_chunked_log_posterior_matches_vmap():
+    """Chunked evaluation equals a single vmap for a non-multiple of the chunk."""
+
+    def log_post(theta):
+        return -0.5 * jnp.sum(theta**2) + jnp.sin(theta[0])
+
+    n = 3 * _LOG_PROB_CHUNK_SIZE + 5
+    samples = np.asarray(random.normal(random.PRNGKey(0), (n, 4)))
+    chunked = _batched_log_posterior_chunked(log_post, samples)
+    reference = np.asarray(jax.vmap(log_post)(jnp.asarray(samples)))
+    assert chunked.shape == (n,)
+    np.testing.assert_allclose(chunked, reference, rtol=0, atol=1e-12)
 
 
 # ==============================================================================
